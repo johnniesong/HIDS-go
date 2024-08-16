@@ -1,5 +1,5 @@
 # 简介 
-english version：[readme](readme_en.md)  
+english version：[readme](readme-en.md)  
 一款go开发的HIDS，用于反入侵监控。最后更新时间为19年，效果肯定比不上持续迭代的商业化产品。  
 具备以下特点：
 1. 具备主机命令自学习功能，不断学习加白高负载进程调用，降低CPU消耗，内存忽略不计。也具备cpu消耗限制的功能，当前限制10%消耗。

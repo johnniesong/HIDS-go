@@ -3,18 +3,18 @@
 path_n=$(dirname $0)
 
 if  [ "`uname -s`" = "Linux" ] ;then 
-    echo 'hids-go';
-    ps awx|grep 'hids-go' |grep -v 'grep'|awk '{print "kill -9 "$1}'|sh;
+    echo 'hidsgo';
+    ps awx|grep 'hidsgo' |grep -v 'grep'|awk '{print "kill -9 "$1}'|sh;
     
-    mkdir -p /home/ops/hids-go;
-    rm -rf /home/ops/hids-go/*;
+    mkdir -p /home/ops/hidsgo;
+    rm -rf /home/ops/hidsgo/*;
 
     
-    cp -r $path_n/* /home/ops/hids-go/;
-    cd /home/ops/hids-go/;
-    chmod +x hids-go;
+    cp -r $path_n/* /home/ops/hidsgo/;
+    cd /home/ops/hidsgo/;
+    chmod +x hidsgo;
     
     #> nohup.out;
     yum update iproute -y
-    nohup /home/ops/hids-go/hids-go > hids-go.log 2>&1 &
+    nohup /home/ops/hidsgo/hidsgo > hidsgo.log 2>&1 &
 fi

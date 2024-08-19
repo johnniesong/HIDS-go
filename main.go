@@ -57,18 +57,18 @@ func unpack(buffer []byte, readerChannel chan []byte) []byte {
 	}
 }
 
+// 从管道中读取数据
 func reader(readerChannel chan []byte) {
 	for {
 		select {
 		case data := <-readerChannel:
 			//fmt.Println("Client got:", len(data), string(data))
 			core.Entry(data[0:len(data)-1], hids_pid)
-		case <-time.After(60 * time.Minute):
-			fmt.Println("Error: reader time out!!!!")
 		}
 	}
 }
 
+// 连接logmon给予的unix套接字，获取auditd数据
 func connect_logmon() (net.Conn, error) {
 	for {
 		c, err := net.Dial("unix", "@audit_socketout")
@@ -76,7 +76,7 @@ func connect_logmon() (net.Conn, error) {
 			if core.IS_DEBUG == true {
 				time.Sleep(1 * time.Second)
 			} else {
-				time.Sleep(10 * time.Second)
+				time.Sleep(100 * time.Second)
 			}
 			fmt.Println("No socket data, try connect")
 		} else {
@@ -90,19 +90,25 @@ func connect_logmon() (net.Conn, error) {
 var hids_pid = strconv.Itoa(os.Getpid())
 
 func main() {
+	fmt.Println(core.VERSION)
 	if core.TEST_CPU_COST == true {
-		defer profile.Start().Stop()
+		defer profile.Start(profile.ProfilePath(".")).Stop()
+	}
+	if core.TEST_MEM_COST == true {
+		defer profile.Start(profile.MemProfile, profile.ProfilePath(".")).Stop()
 	}
 
-	receive_size := 1024 * 1  //todo
-	readerChannelSize := 1024 //todo
-	// 存活性检查
-	//runtime.GOMAXPROCS(3) // 最多使用2个核
-	go core.AliveCheck()
-	go core.CPUCheck()
-	go core.CleanLog()
+	receive_size := 1024 * 1
+	readerChannelSize := 1024
+	core.AbnormalCmdline = map[string]bool{}
+	core.CheckedProcessMap = map[string]bool{}
+	core.UidMap, core.FullUidMap = core.CacheUidMapByPasswd()
+	core.UidMap = core.CacheUidMapByPS(core.UidMap)
+	core.ListenPortMap = core.CacheListenPort()
 	core.EntryMap_tmp = map[string]int{}
 	core.IsOwnAssetAndNotIsolateMap = map[string]bool{}
+	core.RceCheckMap = map[string]int{}
+	//core.DipMap=map[string]int{}
 	core.EntryWhiteListCache = core.RWCache{&sync.RWMutex{}, map[string]bool{}}
 	//在头一小时预制一些cache项
 	core.EntryWhiteListCache.Set("/bin/date", true)
@@ -116,8 +122,19 @@ func main() {
 	core.EntryWhiteListCache.Set("/usr/bin/gawk", true)
 	core.EntryWhiteListCache.Set("/usr/bin/ls", true)
 	core.EntryWhiteListCache.Set("/usr/sbin/ss", true)
+	core.EntryWhiteListCache.Set("/usr/sbin/lsof", true)
+	// 存活性检查
+	//runtime.GOMAXPROCS(3) // 最多使用2个核
+	go core.AliveCheck()                     //存活检查，打点回传
+	go core.CPUCheck()                       //CPU消耗检查，打点回传
+	go core.CleanLog()                       //清理日志
+	go core.CheckResourceAndCloseLsofCheck() //检查是否能够开启lsof检查，性能消耗问题，大约5%的机器开不了
+	go core.CleanRceCheck()                  //清理RCE检查的cache
+	go core.CheckPs()                        //通过ps命令检查进程启动命令是否安全
+	go core.CheckDangerPS()                  //通过ps命令检查进程是否安全
+	go core.CheckLsof_P()                    //周期性对全部异常外连进行检查
 
-	go core.GenEntryMap()
+	go core.GenEntryMap() //周期性加白系统中高频率应用
 	//声明一个临时缓冲区，用来存储被截断的数据
 	tmpBuffer := make([]byte, receive_size/2)
 
@@ -136,11 +153,11 @@ START:
 			if core.IS_DEBUG == true {
 				time.Sleep(1 * time.Second)
 			} else {
-				time.Sleep(10 * time.Second)
+				time.Sleep(100 * time.Second)
 			}
 			goto START
 		}
-		//解决沾包
+		//拼上了,解决沾包
 		tmpBuffer = unpack(append(tmpBuffer, buf[:n]...), readerChannel)
 
 		//fmt.Println("Client got:", string(buf))

@@ -2,13 +2,14 @@ package core
 
 import (
 	"fmt"
-	jsoniter "github.com/json-iterator/go"
+	"github.com/json-iterator/go"
 	"strings"
 	"time"
 )
 
 var json = jsoniter.ConfigFastest
 
+// 具体看文档，或联系黄继伟
 type SYSCALL struct {
 	Uid         string `json:"uid"`
 	Gid         string `json:"gid"`
@@ -78,7 +79,6 @@ func getCmd(log SYSCALL) string {
 func Entry(data []byte, hids_pid string) BugDetail {
 	var log SYSCALL
 	var bug BugDetail
-
 	// 解析json格式的数据到struct
 	var err = json.Unmarshal(data, &log)
 	if err != nil {
@@ -100,13 +100,14 @@ func Entry(data []byte, hids_pid string) BugDetail {
 		return bug
 	}
 
+	//fmt.Println(log)
 	// 先根据ppid的缓存检查下，如果ppid有缓存(且没有命中漏洞)，那么直接设置bug.Type进行下一步，不再重新检查了
 	// @question: 非常严重的问题，如果web容器被频繁访问，刚好又存在命令执行，如果加了缓存就会丢数据。(被缓存为不存在漏洞)
 	// @answer: 正常的访问是不会触发cache的，因为正常访问不会有命令执行
 	isCached := false
 	if bugType, found := prepPidCache.Get(log.PPid); found && bugType.(string) == "" {
 		// 只对没有检查出漏洞的设置cache
-		debug_print("pid In Cache: " + log.PPid)
+		//debug_print("pid In Cache: "+log.PPid)
 		isCached = true
 	} else {
 		checkCommand(log, &bug)
@@ -117,9 +118,11 @@ func Entry(data []byte, hids_pid string) BugDetail {
 		bug.Description = bugList[bug.Type]
 		if bug.Type == "REVERSE_SHELL" {
 			go func(logType string, bugDetail interface{}, auditLog interface{}) { //做二次检查之后，在决定是否告警
-				time.Sleep(2 * time.Second)
-				SSByPid(bug.SSCheckPid)
-				MessageToServer(bug.Type, bug, log)
+				debug_print("HasAbnormalConnectByTarget", bug.SipSportDipDport)
+				time.Sleep(20 * time.Second)
+				if result := HasAbnormalConnectByTarget(bug.SipSportDipDport, 5); result {
+					MessageToServer(bug.Type, bug, log)
+				}
 			}(bug.Type, bug, log)
 		} else {
 			MessageToServer(bug.Type, bug, log)

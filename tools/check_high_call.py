@@ -1,7 +1,7 @@
 
 
 def check_call():
-    with open('/home/ops/hids/hids-go.log') as file:
+    with open('/home/ops/hids/hidsgo.log') as file:
         content=file.readlines()
 
     result={}
@@ -23,7 +23,7 @@ def check_call():
             print(key,result[key])
 
 def check_ss():
-    with open('/home/ops/hids/hids-go.log') as file:
+    with open('/home/ops/hids/hidsgo.log') as file:
         content=file.readlines()
 
     result={}

@@ -1,23 +1,45 @@
 # Introduction
-A HIDS developed in Go for intrusion detection and monitoring. The last update was in 2019, so its effectiveness is certainly not comparable to continuously iterating commercial products.
+English version: readme
+
+A HIDS developed in Go for intrusion detection and monitoring. The last update was in 2019, and it can be considered a relatively complete HIDS prototype. The framework and core detection are established, and the subsequent work involves continuously iterating on the checking logic based on actual business scenarios, attack-defense drills, and accumulated samples.
 
 It has the following features:
 
 1. Self-learning capabilities for host commands, continuously learning to whitelist high-load process calls, reducing CPU consumption while having negligible memory usage. It also has a CPU consumption limit function, currently limiting it to 10%.
 2. Deployed on over 70,000 servers with stable performance. Mainly compatible with CentOS 6 and 7.
-3. Detection based on auditd logs, analyzing key behaviors associated with backdoors. The core principle of intrusion detection is to identify anomalies. For instance, a backdoor in use will have network communication and process execution, so these behaviors will differ from normal communication and processes on the host or even in the cluster. Extracting and identifying these anomalies is the essence of effective intrusion detection.
+3. Detection based on auditd logs, analyzing key behaviors associated with backdoors. The core principle of intrusion detection is to identify anomalies. For instance, a backdoor in use will have network communication and process execution, making these behaviors different from normal communication and processes on the host or even in the cluster. Extracting and identifying these anomalies is the essence of effective intrusion detection.
 4. Having practical experience in internal offense and defense, with three real backdoor detections and one hidden mining detection.
-
 # Dependencies
-The system must have the auditd service enabled.
-The ss command is considerably more efficient than netstat and is very important. (CentOS: yum update iproute)
+1. The system must have the auditd service enabled.
+2. The ss command is considerably more efficient than netstat and is very important. (CentOS: yum update iproute)
+# Core Principle of Risk Checking
+1. Obtain auditd logs, with core log content being ppid, pid, and cmdline.
+2. Check if cmdline is in the already checked cache or whitelist.
+3. If not present, perform checks and layer upwards based on ppid.
+4. Information retrieved during checks:
+   1. cmdline content, checking for calls to bash, python, perl, etc. (core characteristics of backdoors).
+   2. Using ss to get network connections of the pid and check for any listening ports (core characteristics of backdoors).
+   3. Using lsof to obtain the list of files opened by the process. For ELF backdoors, check file types (text vs. executable) and whether the file exists. This is the core distinction between normal and abnormal.
+   4. Using lsof to obtain the network connections opened by the process, with a focus on checking if the peer IP of the connection is trustworthy.
+5. Upon discovering risks, return complete judgment information and the ps information of the process to the alert center.
+# Performance Optimization
+Performance standards must be met for it to run in a business environment.
 
-# Backend server
-Modify the LOGServer IP address in core/config.go to receive alert information.
-
+1. Built-in caching, processed processes are not checked again within a certain timeframe.
+2. Whitelisting, processes that have been whitelisted are not checked again.
+3. Based on the command invocation situation of the host, model high-frequency commands, and those that conform to the model are considered business processes and whitelisted.
+4. Based on the command invocation situation of the entire cluster, model high-frequency commands, and those that conform to the model are considered business processes and whitelisted.
+5. Simple normalization (replacing all letters with 'a' and all numbers with '0') enhances the caching effect by normalizing commands that are not identical but effectively the same.
+   6. For example, /ls aaaaaa and /ls bbbbbbb normalize to /ls aaaaaaa.
+   7. For example, /ls 123456 and /ls 654321 normalize to /ls 000000.
+8. CPU consumption limit; during command invocation, limit CPU consumption.
+9. CPU consumption checks; if the number of times it exceeds the threshold is greater than a certain value, automatically stop.
+# Backend Service
+   Modify the LOGServer IP address in core/config.go to receive alert information.
+   In the configuration, there is an option called isCheckOwnAsset to check if the target IP for network connections is a trusted asset. This feature is disabled in the open-source project and will return "no" by default. Further modifications can be made if needed.
+   No backend web service is provided, but you can DIY one based on the request content or directly convert it to JSON for SLS usage.
 # Running
-Run build.sh to generate the executable file in the bin directory.
-tools/deploy.sh is used for deployment through the agent, currently compatible with CentOS 5, 6, 7, and 8.
-There’s an option in the config called isCheckOwnAsset to check if the target IP for network connections is a trusted asset. This feature is disabled in the open-source project and will return "no" by default. Further modifications can be made if needed.
-Others
-tools/check_high_call.py is used for analyzing high-performance-consuming process calls during development. The analysis file is the log generated by hids-go.
+   Run build.sh to generate the executable file in the bin directory.
+   tools/deploy.sh is used for deployment through the agent, currently compatible with CentOS 5, 6, 7, and 8.
+# Others
+   tools/check_high_call.py is used for analyzing high-performance-consuming process calls during development. The analysis file is the log generated by hids-go.
